@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ProgramBlock xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <ConditionType>OnTrue</ConditionType>
+  <Conditions />
+  <Commands />
+  <ScriptCondition>// this Setup delegate will be executed once, when program become active
+Program.Setup(()=&gt;
+{
+  
+//	Program.AddControlWidget("homegenie/generic/program");
+  	Program.AddInputField("checkip.Path", @"/usr/local/bin/homegenie/log/ip.log", "Path to log file");
+  	Program.AddInputField("checkip.recipients", "", "Email notification recipient(s)");
+});
+
+
+return true;
+</ScriptCondition>
+  <ScriptSource>string ActivityLogPath = Program.InputField("checkip.Path").Value;
+string recipients = Program.InputField("checkip.recipients").Value;
+
+string IP = "checkip.IP";
+Program.Parameter(IP).Value = "-1";
+
+Action&lt;string&gt; 
+Log = (string logtext) =&gt; {
+  string text = DateTime.Now.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff") + " ; " + logtext + "\n";
+  System.IO.File.AppendAllText(ActivityLogPath, text);
+};
+
+
+
+
+while (Program.IsEnabled)
+{
+  try
+  {
+//  string webserviceurl = "http://www.trackip.net/ip"; 
+    string webserviceurl = "http://checkip.dyndns.com"; 
+      
+    var ipweb = Net.WebService(webserviceurl).GetData();
+    int first = ipweb.IndexOf("Address: ") + 9;
+    int last = ipweb.LastIndexOf("&lt;/body&gt;");
+    var ipdata = ipweb.Substring(first, last - first);
+    Program.Notify("IP address", ipdata);
+
+	if (ipdata != Program.Parameter(IP).Value &amp;&amp; ipdata.Length&gt;6)
+    {
+      Log("Old IP " + Program.Parameter(IP).Value.ToString());
+      Log("New IP " + ipdata);
+        
+      var subject = "Homegenie ip address is changed";
+      var messagetext = "The external ip address is changed from '" + 
+                        Program.Parameter(IP).Value +
+                        "' to '" + ipdata + "'.";
+            
+      try
+      {
+        Net.SendMessage( recipients, subject, messagetext );
+        Program.Notify("Ip Information", "Mail send");
+        Log("email sent");
+      }
+      catch
+      {
+        Program.Notify("Ip Error!", "Mail error");
+        Log("email failed");
+      }
+      Program.Parameter(IP).Value = ipdata;
+    }	
+  }
+  catch //(Exception e) 
+  {
+    Program.Notify("Ip ERROR!", "Unable to get data from service.");
+    Log("Unable to get data from service.");
+    Program.Parameter(IP).Value = "-1" ;
+  }
+  
+  Pause(3600); // pause 1 hour before next check
+}
+
+Program.GoBackground();</ScriptSource>
+  <ScriptErrors />
+  <Domain>HomeAutomation.HomeGenie.Automation</Domain>
+  <Address>1006</Address>
+  <Name>CheckIp</Name>
+  <Description>Get the external Ip address.</Description>
+  <Group>NEW</Group>
+  <Features />
+  <ActivationTime xsi:nil="true" />
+  <TriggerTime>2016-12-29T01:39:37.353057Z</TriggerTime>
+  <Type>CSharp</Type>
+  <IsEnabled>true</IsEnabled>
+</ProgramBlock>

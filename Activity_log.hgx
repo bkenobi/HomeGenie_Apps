@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ProgramBlock xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <ConditionType>OnTrue</ConditionType>
+  <Conditions />
+  <Commands />
+  <ScriptCondition>Program.Setup(()=&gt;{
+  
+    Program.AddInputField("ActivityLog.Path", @"/usr/local/bin/homegenie/log/Activity.log", "Path to log file");
+    Program.AddInputField("ActivityLog.ProgramStatus", "FALSE", "Output Program.Status events to log");
+  
+
+});
+
+return true;
+</ScriptCondition>
+  <ScriptSource>string ActivityLogPath = Program.InputField("ActivityLog.Path").Value;
+string PROGRAM_STATUS = Program.InputField("ActivityLog.ProgramStatus").Value;
+
+Action&lt;string&gt; 
+Log = (string logtext) =&gt; {
+  string text = DateTime.Now.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff") + " ; " + logtext + "\n";
+  System.IO.File.AppendAllText(ActivityLogPath, text);
+};
+
+When.ModuleParameterIsChanging((module, parameter) =&gt; 
+{
+  string logtext = module.Instance.Name + " ; " + parameter.Name + " ; " + parameter.Value;
+  
+  // Decide if output is needed
+  if ( !((parameter.Name == "Program.Status") &amp;&amp; (module.Instance.Name == "Energy Monitor") &amp;&amp; (PROGRAM_STATUS == "FALSE")) )
+  {
+    Log(logtext);
+  }
+  
+  return true;
+});
+
+Program.GoBackground();</ScriptSource>
+  <ScriptErrors>Program update is required.</ScriptErrors>
+  <Domain>HomeAutomation.HomeGenie.Automation</Domain>
+  <Address>1002</Address>
+  <Name>Activity log</Name>
+  <Description>Generate a log of HG activity</Description>
+  <Group>NEW</Group>
+  <Features />
+  <ActivationTime xsi:nil="true" />
+  <TriggerTime>2016-12-29T01:39:20.512243Z</TriggerTime>
+  <Type>CSharp</Type>
+  <IsEnabled>true</IsEnabled>
+</ProgramBlock>

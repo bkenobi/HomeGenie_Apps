@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ProgramBlock xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <ConditionType>OnTrue</ConditionType>
+  <Conditions />
+  <Commands />
+  <ScriptCondition>Program.Setup(()=&gt;{
+
+    Program.AddFeature("Sensor,Switch,Light", "Stuck_Module_Check.Enable", "Enable stuck motion sensor checking");
+    Program.AddFeatureTextInput("Sensor,Switch,Light", "Stuck_Module_Check.StuckModuleTimeout", "How long until this sensor is considered stuck (seconds)");
+  
+    Program.AddInputField("Stuck_Module_Check.LogPath", @"/usr/local/bin/homegenie/log/StuckModuleCheck.log", "Path to log file");
+    Program.AddInputField("Stuck_Module_Check.TimerFidelity", "10", "How often does code check for stuck sensors (seconds)");
+
+});
+
+return true;
+
+
+
+</ScriptCondition>
+  <ScriptSource>string ActivityLogPath = Program.InputField("Stuck_Module_Check.LogPath").Value;
+var STUCK_MODULE_CHECK_ENABLE = "Stuck_Module_Check.Enable";
+var STUCK_MODULE_TIMEOUT = "Stuck_Module_Check.StuckModuleTimeout";
+var TIMER_FIDELITY = Program.InputField("Stuck_Module_Check.TimerFidelity").DecimalValue;
+var stuck_devices = Modules.WithFeature(STUCK_MODULE_CHECK_ENABLE);
+
+
+
+Action&lt;string&gt; 
+Log = (string logtext) =&gt; {
+  string text = DateTime.Now.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff") + " ; " + logtext + "\n";
+  System.IO.File.AppendAllText(ActivityLogPath, text);
+};
+
+
+// check status of modules periodically.  
+while (Program.IsEnabled)
+{
+  string logtext = "";
+  //logtext="enabled";
+  //Log(logtext);
+  
+  stuck_devices.Each((module)=&gt;
+  {
+    if (module.Parameter("Status.Level").DecimalValue &gt; 0)
+    {
+      //need to know when module was switched on
+      var lasteventtime = module.Parameter("Status.Level").Statistics.History[0].Timestamp;
+      var rightnow = DateTime.UtcNow;
+      var elapsed = new TimeSpan(rightnow.Ticks - lasteventtime.Ticks); 
+      var timeout = module.Parameter(STUCK_MODULE_TIMEOUT).DecimalValue;
+      if (timeout == 0) timeout = 300;  // default timeout is 5 minutes
+
+      if (elapsed.TotalSeconds &gt; timeout)
+      {
+        logtext = "Stuck module detected.  Turning off (" + elapsed.TotalSeconds + ").";
+        Log(logtext);
+        logtext = "Last module event ; " + module.Instance.Name.ToString() + " ; " + module.Parameter("Status.Level").Value 
+          + " ; " + module.Parameter("Status.Level").Statistics.History[0].Timestamp.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff");
+        Log(logtext);
+       
+        logtext = "UpdateTime before off =" + module.Parameter("Status.Level").UpdateTime.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff");
+        Log(logtext);
+        module.Off(); 
+        logtext = "UpdateTime after off =" + module.Parameter("Status.Level").UpdateTime.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff")+"\n";
+        Log(logtext);
+      }
+      else
+      {
+//        logtext = module.Instance.Name + " is not stuck yet... (" + elapsed.TotalSeconds + ")";
+//        Log(logtext);
+      }
+    }
+    else
+    {
+//      logtext=module.Instance.Name + " is off so not stuck";
+//      Log(logtext);
+    }
+    
+    return false;
+  });
+  Pause(TIMER_FIDELITY);
+}
+
+Program.GoBackground();</ScriptSource>
+  <ScriptErrors>Program update is required.</ScriptErrors>
+  <Domain>HomeAutomation.HomeGenie.Automation</Domain>
+  <Address>1004</Address>
+  <Name>Stuck Module Check</Name>
+  <Description>Watches selected module to see if it's been left ON for more than specified time and turns off if exceeded.  Relies on Last Event code.</Description>
+  <Group>NEW</Group>
+  <Features>
+    <ProgramFeature>
+      <FieldType>checkbox</FieldType>
+      <ForDomains />
+      <ForTypes>Sensor,Switch,Light</ForTypes>
+      <Property>Stuck_Module_Check.Enable</Property>
+      <Description>Enable stuck motion sensor checking</Description>
+    </ProgramFeature>
+    <ProgramFeature>
+      <FieldType>text</FieldType>
+      <ForDomains />
+      <ForTypes>Sensor,Switch,Light</ForTypes>
+      <Property>Stuck_Module_Check.StuckModuleTimeout</Property>
+      <Description>How long until this sensor is considered stuck (seconds)</Description>
+    </ProgramFeature>
+  </Features>
+  <ActivationTime xsi:nil="true" />
+  <TriggerTime>2016-12-29T01:39:16.869416Z</TriggerTime>
+  <Type>CSharp</Type>
+  <IsEnabled>true</IsEnabled>
+</ProgramBlock>

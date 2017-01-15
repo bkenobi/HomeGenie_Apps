@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ProgramBlock xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <ConditionType>OnTrue</ConditionType>
+  <Conditions />
+  <Commands />
+  <ScriptCondition>Program.Setup(()=&gt;{
+
+    Program.AddInputField("HistoryLog.LogPath", @"/usr/local/bin/homegenie/log/History.log", "Path to log file");
+
+});
+
+return true;</ScriptCondition>
+  <ScriptSource>string ActivityLogPath = Program.InputField("HistoryLog.LogPath").Value;
+
+Action&lt;string&gt; 
+Log = (string logtext) =&gt; {
+  string text = DateTime.Now.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff") + " ; " + logtext + "\n";
+  System.IO.File.AppendAllText(ActivityLogPath, text);
+};
+
+  
+
+// Process all module changes
+When.ModuleParameterIsChanging((module, parameter) =&gt; 
+{
+  if (parameter.Name!="Program.Status")
+  {
+    string logtext = module.Instance.Name + " ; " + parameter.Name + " ; " + parameter.Value 
+        + " ; " + parameter.UpdateTime.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff") + "\n"
+        + " ; Statistics.Current.Value=" + parameter.Statistics.Current.Value
+        + " ; " + parameter.Statistics.Current.Timestamp.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff") + "\n"
+        + " ; Statistics.Last.Value=" + parameter.Statistics.Last.Value
+        + " ; " + parameter.Statistics.Last.Timestamp.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff") + "\n"
+        + " ; Statistics.LastOn.Value=" + parameter.Statistics.LastOn.Value
+        + " ; " + parameter.Statistics.LastOn.Timestamp.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff") + "\n"
+        + " ; Statistics.LastOff.Value=" + parameter.Statistics.LastOff.Value
+        + " ; " + parameter.Statistics.LastOff.Timestamp.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff") + "\n"
+        + " ; History.HistoryLimit=" + parameter.Statistics.HistoryLimit + "\n"
+      ;
+
+	for (int i = 0; i &lt;= parameter.Statistics.HistoryLimit-1; i++)
+    {
+      logtext = logtext
+        + " ; Statistics.History["+i+"]=" + parameter.Statistics.History[i].Value
+        + " ; " + parameter.Statistics.History[i].Timestamp.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff") + "\n";
+    }        
+
+    Log(logtext);
+  }
+  
+  return false;
+});
+  
+  
+Program.GoBackground();</ScriptSource>
+  <ScriptErrors>[]</ScriptErrors>
+  <Domain>HomeAutomation.HomeGenie.Automation</Domain>
+  <Address>1020</Address>
+  <Name>History Log</Name>
+  <Description>Generates a log of module history (module.Parameters("???").Statistics</Description>
+  <Group>NEW</Group>
+  <Features />
+  <ActivationTime xsi:nil="true" />
+  <TriggerTime xsi:nil="true" />
+  <Type>CSharp</Type>
+  <IsEnabled>false</IsEnabled>
+</ProgramBlock>

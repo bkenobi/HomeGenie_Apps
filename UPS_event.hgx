@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ProgramBlock xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <ConditionType>OnTrue</ConditionType>
+  <Conditions />
+  <Commands />
+  <ScriptCondition>Program.Setup(()=&gt;
+{
+  Program.AddOption("UPS_Event.Path", @"/usr/local/bin/homegenie/log/upsevent.log", "Path to log file","text");
+  Program.AddOption("UPS_Event.recipients", "", "Email notification recipient(s)","text");
+});
+
+
+return true;</ScriptCondition>
+  <ScriptSource>string ActivityLogPath = Program.Option("UPS_Event.Path").Value;
+string recipients = Program.Option("UPS_Event.recipients").Value;
+string messagetext = "";
+bool sendemail = false;
+
+Action&lt;string&gt; 
+Log = (string logtext) =&gt; {
+  string text = DateTime.Now.ToLocalTime().ToString("yyyyMMdd HH:mm:ss.fffffff") + " ; " + logtext + "\n";
+  System.IO.File.AppendAllText(ActivityLogPath, text);
+};
+
+
+Action&lt;string, string&gt; 
+WriteToSensor = (string dataType, string dataVal) =&gt; {
+  // dataType = parameter name
+  // dataVal = parameter value
+  var module = Modules.InDomain("UPS").WithAddress("UPS").Get();
+  if (module.Instance == null)
+  {
+    Program.AddVirtualModule("UPS", "UPS", "Sensor", "homegenie/generic/sensor");
+    module = Modules.InDomain("UPS").WithAddress("UPS").Get();
+  }
+  if(module.Parameter(dataType).Value != dataVal){
+    module.Parameter(dataType).Value = dataVal;
+    Program.RaiseEvent(module, dataType, dataVal, "");
+  }  
+};
+
+
+/*
+  apcupsd events
+  
+  killpower - turning off ups
+  commfailure - comm lost to ups
+  commok - comm restored to ups
+  powerout - ups detected power outage
+  onbattery - ups running on battery
+  offbattery - ups detected power restored
+  mainsback - attempts to cancel shutdown
+  failing - ups battery power exhausted
+  timeout - ups battery runtime limit reached
+  loadlimit - ups battery discharge limit reached
+  runlimit - ups battery percent limit reached
+  doreboot - system reboot
+  doshutdown - system shutdown
+  annoyme - informs user to log off
+  emergency - emergency shutdown
+  changeme - ups battery failure (info)
+  remotedown - remote shutdown call detected
+  startselftest - ups self test detected
+  endselftest - ups self test ended
+  battdetach - ups battery has been disconnected
+  battattach - ups battery has been reconnected
+
+*/
+
+When.WebServiceCallReceived( "ups.event", (args) =&gt;
+{
+  string[] reqs = ((string)args).Split('/');
+  string upsevent = reqs[1];
+  sendemail = false;
+  
+  Log("UPS event ; " + upsevent);
+  Program.Notify("UPS event",upsevent);
+  
+  messagetext = "";
+  
+  switch (upsevent)
+  {
+    case "killpower":
+      messagetext="killpower - turning off ups";
+      sendemail = true;
+      break;
+
+    case "commfailure":
+      messagetext="commfailure - comm lost to ups";
+      break;
+
+    case "commok":
+      messagetext="commok - comm restored to ups";
+      break;
+
+    case "powerout":
+      messagetext="powerout - ups detected power outage";
+      break;
+
+    case "onbattery":
+      messagetext="onbattery - ups running on battery";
+      sendemail = true;
+      break;
+
+    case "offbattery":
+      messagetext="offbattery - ups detected power restored";
+      break;
+
+    case "mainsback":
+      messagetext="mainsback - attempts to cancel shutdown";
+      break;
+
+    case "failing":
+      messagetext="failing - ups battery power exhausted";
+      break;
+
+    case "timeout":
+      messagetext="timeout - ups battery runtime limit reached";
+      break;
+
+    case "loadlimit":
+      messagetext="loadlimit - ups battery discharge limit reached";
+      break;
+
+    case "runlimit":
+      messagetext="runlimit - ups battery percent limit reached";
+      break;
+
+    case "doreboot":
+      messagetext="doreboot - system reboot";
+      break;
+
+    case "doshutdown":
+      messagetext="doshutdown - system shutdown";
+      break;
+
+    case "annoyme":
+      messagetext="annoyme - informs user to log off";
+      break;
+
+    case "emergency":
+      messagetext="emergency - emergency shutdown";
+      break;
+
+    case "changeme":
+      messagetext="changeme - ups battery failure (info)";
+      sendemail = true;
+      break;
+
+    case "remotedown":
+      messagetext="remotedown - remote shutdown call detected";
+      break;
+
+    case "startselftest":
+      messagetext="startselftest - ups self test detected";
+      break;
+
+    case "endselftest":
+      messagetext="endselftest - ups self test ended";
+      break;
+
+    case "battdetach":
+      messagetext="battdetach - ups battery has been disconnected";
+      break;
+
+    case "battattach":
+      messagetext="battattach - ups battery has been reconnected";
+      break;
+
+    default:
+	  messagetext="unknown event";
+      break;
+  }
+  
+  if (recipients != "" &amp;&amp; sendemail)
+  {
+    Net.SendMessage( recipients, "HG UPS Event (" + upsevent + ")", "A UPS event has been detected at " + DateTime.Now.ToString("HH:mm:ss") + ".  Details of the error are as follows:\n\n" + messagetext);
+  }
+  
+  return null;
+});
+
+while (Program.IsEnabled)
+{
+  var proc = new System.Diagnostics.Process
+  {
+    StartInfo = new System.Diagnostics.ProcessStartInfo
+    {
+      FileName = "apcaccess",
+      Arguments = "status",
+      UseShellExecute = false,
+      RedirectStandardOutput = true,
+      CreateNoWindow = true
+    }
+  };
+  
+  proc.Start();
+  string status = "";
+  
+  while (!proc.StandardOutput.EndOfStream) {
+    string line = proc.StandardOutput.ReadLine();
+	string[] output = ((string)line).Split(':');
+    
+	switch (output[0].Trim()) {
+    case "STATUS":
+      status = output[1].Trim();
+      //Program.Notify("USP Status.Level", status);
+      /*
+      if (output[1].Trim() == "ONLINE") {
+        WriteToSensor("Status.Level", 1);
+      } else {
+        WriteToSensor("Status.Level", 0);
+      }
+      */
+      //Program.RaiseEvent("UPS", "Sensor.Status", output[1].Trim(), "update UPS status");
+      WriteToSensor("Sensor.Status", output[1].Trim());
+      break;
+    case "BCHARGE":
+      //Status.Battery
+      string b_tmp = output[1].Trim();
+      string[] b_tmp1 = b_tmp.Split(' '); 
+      var bcharge = Convert.ToDouble(b_tmp1[0]);
+      //Program.RaiseEvent("UPS", "Status.Battery", bcharge, "update UPS battery level");
+      WriteToSensor("Status.Battery", bcharge.ToString());
+      break;
+	case "TIMELEFT":
+      //Program.RaiseEvent("UPS", "Sensor.TimeLeft", output[1].Trim(), "update UPS time left");
+      WriteToSensor("Sensor.TimeLeft", output[1].Trim());
+      /*
+      string t_tmp = output[1].Trim();
+      string[] t_tmp1 = t_tmp.Split(' ');
+      var timeleft = Convert.ToDouble(t_tmp1[0]);
+      WriteToSensor("Sensor.TimeLeft", timeleft);
+      */
+      break;
+    }
+  }
+  //Program.Notify(status,"BCHARGE=" + bcharge.ToString() + "\nTIMELEFT=" + timeleft.ToString() + "\nMBATTCHG=" + mbattchg.ToString());
+  Program.RaiseEvent("Program.UiRefresh", "Data updated", "");
+  Pause(30);
+}
+
+When.SystemStarted( () =&gt;
+{
+  Net.SendMessage( recipients, "HomeGenie started", "notification");
+  return false;
+});
+
+
+When.SystemStopping( () =&gt;
+{
+  Net.SendMessage( recipients, "HomeGenie shutting down", "notification");
+  // returning true will route this event to other listeners
+  return true;
+});
+
+
+Program.GoBackground();</ScriptSource>
+  <ScriptErrors />
+  <Domain>HomeAutomation.HomeGenie.Automation</Domain>
+  <Address>1017</Address>
+  <Name>UPS event</Name>
+  <Description>apcupsd event handler</Description>
+  <Group>NEW</Group>
+  <Features />
+  <ActivationTime>2016-12-29T20:10:31.139263Z</ActivationTime>
+  <TriggerTime>2016-12-29T20:10:33.238656Z</TriggerTime>
+  <Type>CSharp</Type>
+  <IsEnabled>true</IsEnabled>
+</ProgramBlock>

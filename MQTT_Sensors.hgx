@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ProgramBlock xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <ConditionType>OnTrue</ConditionType>
+  <Conditions />
+  <Commands />
+  <ScriptCondition>Program.Setup(()=&gt; {
+  IPHostEntry host;
+  string localIP = "1";
+  host = Dns.GetHostEntry(Dns.GetHostName());
+  foreach (IPAddress ip in host.AddressList)
+  {
+    if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+    {
+      localIP = ip.ToString();
+      localIP = localIP.Substring(localIP.LastIndexOf(".") + 1);
+    }
+  }
+  Program.AddInputField("ClientId", "hg-" + localIP, "0. Enter unique ID for this client");
+  Program.AddInputField("ServerAddress", "", "1. MQTT server address");
+  Program.AddInputField("ServerPort", "1883", "2. MQTT server port");
+  Program.AddInputField("ServerTopic", "#", "3. Topic");
+  Program.AddInputField("Username", "", "4. Username (optional)");
+  Program.AddInputField("Password", "", "5. Password (optional)");
+  Program.AddFeature("", "MQTT.SensorPublish", "Publish module on MQTT network");
+});
+//
+return true; // execute "Code To Run"
+</ScriptCondition>
+  <ScriptSource>string server = Program.InputField("ServerAddress").Value.Trim();
+int port = 1883; int.TryParse(Program.InputField("ServerPort").Value, out port);
+string topic = Program.InputField("ServerTopic").Value.Trim();
+string clientid = Program.InputField("ClientId").Value.Trim();
+
+var MqttIsConnected = false;
+
+
+Action&lt;string, string&gt; 
+Log = (string LogPath, string logtext) =&gt; {
+  string text = DateTime.Now.ToLocalTime().ToString("yyyy/MM/dd HH:mm:ss.fffffff") + " ; " + logtext + "\n";
+  System.IO.File.AppendAllText(LogPath, text);
+};
+
+
+Action&lt;string, string, double&gt; 
+WriteToSensor = (string sensorId, string dataType, double dataVal) =&gt; {
+  // sensorId = module
+  // dataType = parameter name
+  // dataVal = parameter value
+  var module = Modules.InDomain("MQTT:Sensors").WithAddress(sensorId).Get();
+  if (module.Instance == null)
+  {
+    Program.AddVirtualModule("MQTT:Sensors", sensorId, "Sensor", "homegenie/generic/sensor");
+    module = Modules.InDomain("MQTT:Sensors").WithAddress(sensorId).Get();
+  }
+  if(module.Parameter(dataType).Value != dataVal.ToString("0.0")){
+    module.Parameter(dataType).Value = dataVal.ToString("0.0");
+    Program.RaiseEvent(module, dataType, dataVal.ToString("0.0"), "");
+  }  
+};
+
+
+if (server == "")
+{
+  Program.Notify("MQTT", "Please configure server address");
+  Pause(5);
+  return;
+}
+else
+{
+  Program.Notify("MQTT", "Connecting to " + server + "...");
+  try
+  {
+    MqttClient
+      .Service(server)
+      .Connect(port, clientid);
+    Program.Notify("MQTT", "Connected!");
+    MqttIsConnected = true;
+  }
+  catch (Exception e)
+  {
+    Program.Notify("MQTT", e.Message);
+    Pause(5);
+    return;
+  }
+}
+
+MqttClient.Subscribe(topic, (mtopic, mpayload) =&gt; {
+  string dataType = "";
+  double dataVal = 0;
+  
+  try
+  {
+    Log("/usr/local/bin/homegenie/log/Sensor.log", mtopic + " " + mpayload);
+    
+    switch (mtopic)
+    {
+      case "acurite5n1":
+      foreach (var data in mpayload.Split(','))
+      {
+       	var item = data.Split('=');
+        
+        switch (item[0])
+        {
+          case "TempF":
+            dataType = "Sensor.Temperature";
+            dataVal = (5.0 / 9.0) * (double.Parse(item[1]) - 32);
+          break;
+          
+          case "Winddir":
+            dataType = "Sensor.Winddir";
+            dataVal = float.Parse(item[1]);
+          break;
+          
+          case "Windspeed":
+            dataType = "Sensor.Windspeed";
+            dataVal = float.Parse(item[1]);
+          break;
+          
+          case "Humidity":
+            dataType = "Sensor.Humidity";
+            dataVal = float.Parse(item[1]);
+          break;
+          
+          case "Rainfall":
+            dataType = "Sensor.Rainfall";
+            dataVal = float.Parse(item[1]);
+          break;
+          
+          case "Battery":
+            dataType = "Status.Battery";
+            dataVal = float.Parse(item[1])*100;
+          break;
+          
+        }
+        WriteToSensor(mtopic,dataType,dataVal);
+      }
+      break;
+      
+      case "blueline":
+      foreach (var data in mpayload.Split(','))
+      {
+       	var item = data.Split('=');
+        
+        switch (item[0])
+        {
+          case "TempF":
+            dataType = "Sensor.Temperature";
+            dataVal = (5.0 / 9.0) * (double.Parse(item[1]) - 32);
+          break;
+          
+          case "CurrentPower":
+            dataType = "Meter.Watts";
+            dataVal = float.Parse(item[1]);
+          break;
+          
+          case "TotalEnergy":
+            dataType = "Sensor.WattHours";
+            dataVal = float.Parse(item[1]);
+          break;
+          
+          case "Battery":
+            dataType = "Status.Battery";
+            dataVal = float.Parse(item[1])*100;
+          break;
+
+        }
+        WriteToSensor(mtopic,dataType,dataVal);
+      }
+      break;
+      case "acurite592tx":
+      foreach (var data in mpayload.Split(','))
+      {
+        if (data.Length &gt; 0)
+        {
+          var item = data.Split('=');
+          var channel = item[0].Substring(item[0].Length-1);
+
+          switch (item[0].Substring(0,item[0].Length-1))
+          {
+            case "Temp":
+              dataType = "Sensor.Temperature";
+              dataVal = (5.0 / 9.0) * (double.Parse(item[1]) - 32);
+            break;
+
+            case "Battery":
+              dataType = "Status.Battery";
+              dataVal = float.Parse(item[1])*100;
+            break;
+          }
+          WriteToSensor(mtopic+channel,dataType,dataVal);
+        }
+      }
+      break;
+      
+    }
+  } catch (Exception e) {
+    Program.Notify("MQTT ERROR!", e.Message);
+    MqttIsConnected = false;
+  }
+});
+
+Program.GoBackground();
+
+while (Program.IsRunning &amp;&amp; MqttIsConnected) Pause(1);</ScriptSource>
+  <ScriptErrors />
+  <Domain>HomeAutomation.HomeGenie.Automation</Domain>
+  <Address>1030</Address>
+  <Name>MQTT Sensors</Name>
+  <Description />
+  <Group>NEW</Group>
+  <Features>
+    <ProgramFeature>
+      <FieldType>checkbox</FieldType>
+      <ForDomains />
+      <ForTypes />
+      <Property>MQTT.SensorPublish</Property>
+      <Description>Publish module on MQTT network</Description>
+    </ProgramFeature>
+  </Features>
+  <ActivationTime>2016-12-29T20:10:47.673149Z</ActivationTime>
+  <TriggerTime>2016-12-29T20:10:49.552515Z</TriggerTime>
+  <Type>CSharp</Type>
+  <IsEnabled>true</IsEnabled>
+</ProgramBlock>
