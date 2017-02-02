@@ -77,6 +77,29 @@ When.ModuleParameterIsChanging((module, parameter) =&gt;
     //Log("Day");
   }
   
+//NEW BELOW
+  
+  // Check if module was light.  If so, disable timers.
+  if (module.IsOfDeviceType("Light") || module.IsOfDeviceType("Dimmer"))
+  {
+   	Modules.WithFeature(SMART_LIGHT_ENABLE).Each((light_mod)=&gt;
+    {
+      if (light_mod.Instance.Name == module.Instance.Name)
+      { 
+        //Log("1.1-" + module.Instance.Name + " ; " + parameter.Name + " ; " + parameter.Value);
+        if (module.Parameter("Status.Level").DecimalValue==0)
+        {
+          //Light was turned off, disable timer.
+          //Log("1.2-disable module timer");
+          light_mod.Parameter(TIMER_ON).Value = "FALSE";
+        }
+      }
+      return false;
+    });
+  }
+      
+// NEW ABOVE      
+      
   if (module.IsOfDeviceType("Switch"))
   {
     Modules.WithFeature(SMART_LIGHT_ENABLE).WithParameter(SWITCH_NAME).Each((switch_mod)=&gt;
@@ -324,7 +347,7 @@ while (Program.IsEnabled)
 }
 
 Program.GoBackground();</ScriptSource>
-  <ScriptErrors>Program update is required.</ScriptErrors>
+  <ScriptErrors>[]</ScriptErrors>
   <Domain>HomeAutomation.HomeGenie.Automation</Domain>
   <Address>1016</Address>
   <Name>Advanced Smart Lights</Name>
@@ -367,8 +390,8 @@ Program.GoBackground();</ScriptSource>
       <Description>Should the motion timer start when sensor sends an off command (TRUE), or when the initial on command is sent (FALSE)?</Description>
     </ProgramFeature>
   </Features>
-  <ActivationTime xsi:nil="true" />
-  <TriggerTime>2016-12-29T01:39:16.146528Z</TriggerTime>
+  <ActivationTime>2017-02-02T04:32:02.120575Z</ActivationTime>
+  <TriggerTime>2017-02-02T04:32:03.949337Z</TriggerTime>
   <Type>CSharp</Type>
   <IsEnabled>true</IsEnabled>
 </ProgramBlock>
