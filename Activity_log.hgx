@@ -24,7 +24,7 @@ Log = (string logtext) =&gt; {
 
 When.ModuleParameterIsChanging((module, parameter) =&gt; 
 {
-  string logtext = module.Instance.Name + " ; " + parameter.Name + " ; " + parameter.Value;
+  string logtext = module.Instance.Address + " ; " + module.Instance.Name + " ; " + parameter.Name + " ; " + parameter.Value;
   
   // Decide if output is needed
   if ( !((parameter.Name == "Program.Status") &amp;&amp; (module.Instance.Name == "Energy Monitor") &amp;&amp; (PROGRAM_STATUS == "FALSE")) )
