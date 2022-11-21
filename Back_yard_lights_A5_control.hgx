@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-16"?>
+<ProgramBlock xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ScriptSetup />
+  <ScriptSource>// CSharp Automation Program Plugin
+// Example for using Helper Classes:
+// Modules.WithName("Light 1").On();
+
+
+// Process all module changes
+When.ModuleParameterIsChanging((module, parameter) =&gt; 
+{
+  if (module.Instance.Name=="Back yard lights")
+  { 
+    //Log("1.1-" + module.Instance.Name + " ; " + parameter.Name + " ; " + parameter.Value);
+    if (module.Parameter("Status.Level").DecimalValue==1)
+    {
+      Modules.WithAddress("A2,A3,A4").On();
+    }
+    else if (module.Parameter("Status.Level").DecimalValue==0)
+    {
+      Modules.WithAddress("A2,A3,A4").Off();
+    }
+  }
+  return false;
+});
+
+Program.GoBackground();
+</ScriptSource>
+  <ScriptErrors />
+  <Domain>HomeAutomation.HomeGenie.Automation</Domain>
+  <Address>1003</Address>
+  <Name>Back yard lights A5 control</Name>
+  <Description />
+  <Group>NEW</Group>
+  <Features />
+  <AutoRestartEnabled>true</AutoRestartEnabled>
+  <ActivationTime>2022-11-21T05:40:03.260792Z</ActivationTime>
+  <TriggerTime>2022-11-21T05:40:07.948858Z</TriggerTime>
+  <Type>CSharp</Type>
+  <IsEnabled>true</IsEnabled>
+</ProgramBlock>
